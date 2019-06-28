@@ -1,6 +1,10 @@
+import classes.Picture;
+import classes.Pixel;
+
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.io.File;
+import java.text.DecimalFormat;
 
 /**
  * Used to generate a collage from a picture.
@@ -24,7 +28,23 @@ public class Collage {
         this.picScl = picScl;
         this.scl = scl;
 
-        images = new File(directory).listFiles();
+        File[] files = new File(directory).listFiles();
+
+        int imgCnt = 0;
+        for (File file : files) {
+            if (file.getPath().endsWith(".jpg"))
+                imgCnt++;
+        }
+
+        images = new File[imgCnt];
+
+        for (int i = 0, j = 0; i < files.length; i++) {
+            if (files[i].getPath().endsWith(".jpg")) {
+                images[j] = files[i];
+                j++;
+            }
+        }
+
         palette = generatePalette();
     }
 
@@ -34,6 +54,7 @@ public class Collage {
     public Picture createCollage(boolean dither) {
         Picture scaled = source.scale((double) 1 / scl, (double) 1 / scl);
         Picture collage = new Picture(source.getHeight() / scl * picScl, source.getWidth() / scl * picScl);
+        DecimalFormat df = new DecimalFormat("0.000");
 
         System.out.println("Creating collage...");
         for (int y = 0; y < scaled.getHeight(); y++) {
@@ -50,7 +71,7 @@ public class Collage {
                 Picture sclPic = scale(new Picture(images[index].getAbsolutePath()), picScl, picScl, picColor);
 
                 collage.copy(sclPic, y * picScl, x * picScl);
-                System.out.println("Progress: " + (y * scaled.getWidth() + x + 1) * 100 / (scaled.getWidth() * scaled.getHeight()) + "%");
+                System.out.println("Progress: " + df.format((double) (y * scaled.getWidth() + x + 1) * 100 / (scaled.getWidth() * scaled.getHeight())) + "%");
             }
         }
 
