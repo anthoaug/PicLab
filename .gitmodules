@@ -1,0 +1,8 @@
+[submodule "PicLab"]
+	path = PicLab
+	url = https://github.com/anthoaug/PicLab.git
+	branch = master
+[submodule "Houses-dataset"]
+	path = Houses-dataset
+	url = https://github.com/emanhamed/Houses-dataset.git
+	branch = master
