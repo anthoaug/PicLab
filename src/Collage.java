@@ -5,6 +5,10 @@ import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.io.File;
 import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Used to generate a collage from a picture.
@@ -18,9 +22,9 @@ public class Collage {
     private int scl;
 
     /**
-     * @param source Picture to make the collage from.
-     * @param picScl How large each individual picture in the collage will be.
-     * @param scl Resolution of the collage.
+     * @param source    Picture to make the collage from.
+     * @param picScl    How large each individual picture in the collage will be.
+     * @param scl       Resolution of the collage.
      * @param directory Source directory of the images to be used in the collage.
      */
     public Collage(Picture source, int picScl, int scl, String directory) {
@@ -57,6 +61,7 @@ public class Collage {
         DecimalFormat df = new DecimalFormat("0.000");
 
         System.out.println("Creating collage...");
+        List<CompletableFuture<Void>> copyTasks = new ArrayList<>();
         for (int y = 0; y < scaled.getHeight(); y++) {
             for (int x = 0; x < scaled.getWidth(); x++) {
                 Color current = scaled.getPixel(x, y).getColor();
@@ -68,17 +73,27 @@ public class Collage {
                     distributeError(scaled, picColor, x, y);
                 }
 
-                Picture sclPic = scale(new Picture(images[index].getAbsolutePath()), picScl, picScl, picColor);
+                int finalX = x, finalY = y;
+                copyTasks.add(CompletableFuture.runAsync(() -> {
+                    Picture sclPic = scale(new Picture(images[index].getAbsolutePath()), picScl, picScl, picColor);
+                    collage.copy(sclPic, finalY * picScl, finalX * picScl);
+                }));
 
-                collage.copy(sclPic, y * picScl, x * picScl);
                 System.out.println("Progress: " + df.format((double) (y * scaled.getWidth() + x + 1) * 100 / (scaled.getWidth() * scaled.getHeight())) + "%");
             }
+        }
+
+        try {
+            System.out.println("Finishing collage...");
+            CompletableFuture.allOf(copyTasks.toArray(new CompletableFuture[0])).get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Issue with encountered when completing collage.", e);
         }
 
         return collage;
     }
 
-    public static Picture scale (Picture pic, int width, int height, Color background) {
+    public static Picture scale(Picture pic, int width, int height, Color background) {
         AffineTransform scale = new AffineTransform();
         scale.scale((double) width / pic.getWidth(), (double) height / pic.getHeight());
 
@@ -93,13 +108,13 @@ public class Collage {
 
     /**
      * Floyd-Steinberg dithering, implemented as described at:
-     *
+     * <p>
      * https://en.wikipedia.org/wiki/Floyd-Steinberg_dithering
      *
-     * @param pic Picture to be dithered.
+     * @param pic      Picture to be dithered.
      * @param newColor New color.
-     * @param x Current x position.
-     * @param y Current y position.
+     * @param x        Current x position.
+     * @param y        Current y position.
      */
     private static void distributeError(Picture pic, Color newColor, int x, int y) {
         Pixel current = pic.getPixel(x, y);
@@ -111,29 +126,29 @@ public class Collage {
         if (x + 1 < pic.getWidth()) {
             Pixel next = pic.getPixel(x + 1, y);
             next.setColor(new Color(fix(next.getRed() + errorR * 7 / 16),
-                    fix(next.getGreen() + errorG * 7 / 16),
-                    fix(next.getBlue() + errorB * 7 / 16)));
+                fix(next.getGreen() + errorG * 7 / 16),
+                fix(next.getBlue() + errorB * 7 / 16)));
         }
 
         if (x - 1 > 0 && y + 1 < pic.getHeight()) {
             Pixel next = pic.getPixel(x - 1, y + 1);
             next.setColor(new Color(fix(next.getRed() + errorR * 3 / 16),
-                    fix(next.getGreen() + errorG * 3 / 16),
-                    fix(next.getBlue() + errorB * 3 / 16)));
+                fix(next.getGreen() + errorG * 3 / 16),
+                fix(next.getBlue() + errorB * 3 / 16)));
         }
 
         if (y + 1 < pic.getHeight()) {
             Pixel next = pic.getPixel(x, y + 1);
             next.setColor(new Color(fix(next.getRed() + errorR * 5 / 16),
-                    fix(next.getGreen() + errorG * 5 / 16),
-                    fix(next.getBlue() + errorB * 5 / 16)));
+                fix(next.getGreen() + errorG * 5 / 16),
+                fix(next.getBlue() + errorB * 5 / 16)));
         }
 
         if (x + 1 < pic.getWidth() && y + 1 < pic.getHeight()) {
             Pixel next = pic.getPixel(x + 1, y + 1);
             next.setColor(new Color(fix(next.getRed() + errorR / 16),
-                    fix(next.getGreen() + errorG / 16),
-                    fix(next.getBlue() + errorB / 16)));
+                fix(next.getGreen() + errorG / 16),
+                fix(next.getBlue() + errorB / 16)));
         }
     }
 
@@ -164,17 +179,23 @@ public class Collage {
         System.out.println("Generating palette...");
         Color[] palette;
 
-        String pathWin = "F:/PicLab/src/pixLab/images2";
-        String pathMac = "/Volumes/ANTHO-AUG/PicLab/src/pixLab/images2";
-
         palette = new Color[images.length];
 
+        List<CompletableFuture<Void>> averageTasks = new ArrayList<>();
         int count = 0;
         for (File picFile : images) {
             System.out.println("Loading file: " + picFile.getName() + " (" + (count + 1) + " of " + images.length + ").");
 
-            palette[count] = avgColor(new Picture(picFile.getAbsolutePath()), 100);
+            int finalCount = count;
+            averageTasks.add(CompletableFuture.runAsync(() -> palette[finalCount] = avgColor(new Picture(picFile.getAbsolutePath()), 100)));
             count++;
+        }
+
+        try {
+            System.out.println("Finishing palette...");
+            CompletableFuture.allOf(averageTasks.toArray(new CompletableFuture[0])).get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new RuntimeException("Issue encountered with generating palette.", e);
         }
 
         return palette;
@@ -224,7 +245,7 @@ public class Collage {
     /**
      * Finds the average color of a picture.
      *
-     * @param pic Picture to find average color.
+     * @param pic     Picture to find average color.
      * @param samples How many pixels to sample for average color.
      * @return Average color of the picture.
      */
@@ -247,9 +268,9 @@ public class Collage {
     /**
      * Finds the difference between two colors.
      * Uses formula described at:
-     *
+     * <p>
      * https://en.wikipedia.org/wiki/Color_difference
-     *
+     * <p>
      * under section "Euclidean".
      *
      * @param c1 First color.
@@ -265,4 +286,5 @@ public class Collage {
 
         return Math.sqrt(2 * dR + 4 * dG + 3 * dB + r * (dR - dB) / 256);
     }
+
 }
