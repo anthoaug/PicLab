@@ -7,6 +7,7 @@ import java.io.File;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -20,6 +21,7 @@ public class Collage {
     private Picture source;
     private int picScl;
     private int scl;
+    private ExecutorService executorService;
 
     /**
      * @param source    Picture to make the collage from.
@@ -27,7 +29,8 @@ public class Collage {
      * @param scl       Resolution of the collage.
      * @param directory Source directory of the images to be used in the collage.
      */
-    public Collage(Picture source, int picScl, int scl, String directory) {
+    public Collage(Picture source, int picScl, int scl, String directory, ExecutorService executorService) {
+        this.executorService = executorService;
         this.source = source;
         this.picScl = picScl;
         this.scl = scl;
@@ -77,7 +80,7 @@ public class Collage {
                 copyTasks.add(CompletableFuture.runAsync(() -> {
                     Picture sclPic = scale(new Picture(images[index].getAbsolutePath()), picScl, picScl, picColor);
                     collage.copy(sclPic, finalY * picScl, finalX * picScl);
-                }));
+                }, executorService));
 
                 System.out.println("Progress: " + df.format((double) (y * scaled.getWidth() + x + 1) * 100 / (scaled.getWidth() * scaled.getHeight())) + "%");
             }
@@ -187,7 +190,7 @@ public class Collage {
             System.out.println("Loading file: " + picFile.getName() + " (" + (count + 1) + " of " + images.length + ").");
 
             int finalCount = count;
-            averageTasks.add(CompletableFuture.runAsync(() -> palette[finalCount] = avgColor(new Picture(picFile.getAbsolutePath()), 100)));
+            averageTasks.add(CompletableFuture.runAsync(() -> palette[finalCount] = avgColor(new Picture(picFile.getAbsolutePath()), 100), executorService));
             count++;
         }
 
